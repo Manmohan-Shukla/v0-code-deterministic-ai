@@ -106,21 +106,30 @@ export default function CodeReviewPage() {
       const analysis = response.data.analysis
       
       // Transform API response to ReviewResult format
-      const transformedResults: ReviewResult[] = analysis.issues.map((issue: { type: string; line?: number; message: string }) => ({
-        type: issue.type === 'info' ? 'suggestion' : issue.type,
-        title: issue.type.charAt(0).toUpperCase() + issue.type.slice(1),
-        description: issue.message,
-        line: issue.line,
-      }))
+      const transformedResults: ReviewResult[] = []
+      
+      // Add issues
+      if (Array.isArray(analysis?.issues)) {
+        analysis.issues.forEach((issue: { type: string; line?: number; message: string }) => {
+          transformedResults.push({
+            type: (issue.type === 'info' ? 'suggestion' : issue.type) as ReviewResult['type'],
+            title: issue.type.charAt(0).toUpperCase() + issue.type.slice(1),
+            description: issue.message,
+            line: issue.line,
+          })
+        })
+      }
       
       // Add suggestions
-      analysis.suggestions.forEach((suggestion: string) => {
-        transformedResults.push({
-          type: 'suggestion',
-          title: 'Suggestion',
-          description: suggestion,
+      if (Array.isArray(analysis?.suggestions)) {
+        analysis.suggestions.forEach((suggestion: string) => {
+          transformedResults.push({
+            type: 'suggestion',
+            title: 'Suggestion',
+            description: suggestion,
+          })
         })
-      })
+      }
       
       setResults(transformedResults.length > 0 ? transformedResults : [{
         type: 'success',
@@ -237,7 +246,7 @@ export default function CodeReviewPage() {
                     </div>
                     
                     <pre className="mb-3 overflow-hidden truncate font-mono text-sm text-foreground">
-                      {item.code.slice(0, 50)}...
+                      {(item.code || '').slice(0, 50)}...
                     </pre>
                     
                     {/* Meta */}
