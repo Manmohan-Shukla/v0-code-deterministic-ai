@@ -77,7 +77,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null)
     
     try {
+      console.log('[v0] Signup attempt:', { name, email, apiUrl: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api' })
       const response = await api.post('/auth/signup', { name, email, password })
+      console.log('[v0] Signup response:', response.data)
       const { token: newToken, user: userData } = response.data
       
       setToken(newToken)
@@ -87,7 +89,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       router.push('/dashboard')
     } catch (err: unknown) {
-      const errorMessage = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Signup failed. Please try again.'
+      console.log('[v0] Signup error:', err)
+      const axiosError = err as { response?: { data?: { message?: string }, status?: number }, message?: string }
+      console.log('[v0] Error details:', { 
+        status: axiosError?.response?.status, 
+        data: axiosError?.response?.data,
+        message: axiosError?.message 
+      })
+      const errorMessage = axiosError?.response?.data?.message || axiosError?.message || 'Signup failed. Please try again.'
       setError(errorMessage)
       throw new Error(errorMessage)
     } finally {
