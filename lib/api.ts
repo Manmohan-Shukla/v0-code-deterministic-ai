@@ -1,8 +1,9 @@
 import axios from 'axios'
 
 // Create axios instance with base configuration
+// Uses local Next.js API routes by default, or external backend if NEXT_PUBLIC_API_URL is set
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api',
+  baseURL: process.env.NEXT_PUBLIC_API_URL || '/api',
   headers: {
     'Content-Type': 'application/json',
   },

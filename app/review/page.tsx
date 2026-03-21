@@ -7,7 +7,7 @@ import ProtectedRoute from '@/components/ProtectedRoute'
 import CodeEditor from '@/components/CodeEditor'
 import ResultPanel from '@/components/ResultPanel'
 import { Button } from '@/components/ui/button'
-import { codeApi } from '@/lib/api'
+import api from '@/lib/api'
 import { cn } from '@/lib/utils'
 
 interface ReviewResult {
@@ -87,8 +87,8 @@ export default function CodeReviewPage() {
 
   const loadHistory = async () => {
     try {
-      const response = await codeApi.getReviewHistory()
-      setHistory(response.data || mockHistory)
+      const response = await api.get('/review')
+      setHistory(response.data.history || mockHistory)
     } catch {
       // Use mock data if API fails
       setHistory(mockHistory)
@@ -102,8 +102,31 @@ export default function CodeReviewPage() {
     setResults(null)
     
     try {
-      const response = await codeApi.analyzeCode(code)
-      setResults(response.data.results || mockResults)
+      const response = await api.post('/review', { code })
+      const analysis = response.data.analysis
+      
+      // Transform API response to ReviewResult format
+      const transformedResults: ReviewResult[] = analysis.issues.map((issue: { type: string; line?: number; message: string }) => ({
+        type: issue.type === 'info' ? 'suggestion' : issue.type,
+        title: issue.type.charAt(0).toUpperCase() + issue.type.slice(1),
+        description: issue.message,
+        line: issue.line,
+      }))
+      
+      // Add suggestions
+      analysis.suggestions.forEach((suggestion: string) => {
+        transformedResults.push({
+          type: 'suggestion',
+          title: 'Suggestion',
+          description: suggestion,
+        })
+      })
+      
+      setResults(transformedResults.length > 0 ? transformedResults : [{
+        type: 'success',
+        title: 'No Issues Found',
+        description: 'Your code looks good! No issues or warnings detected.',
+      }])
       
       // Refresh history after successful analysis
       loadHistory()

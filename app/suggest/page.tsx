@@ -7,7 +7,7 @@ import ProtectedRoute from '@/components/ProtectedRoute'
 import CodeEditor from '@/components/CodeEditor'
 import ResultPanel from '@/components/ResultPanel'
 import { Button } from '@/components/ui/button'
-import { codeApi } from '@/lib/api'
+import api from '@/lib/api'
 import { cn } from '@/lib/utils'
 
 type SuggestionTab = 'optimize' | 'tests' | 'complexity'
@@ -138,19 +138,20 @@ export default function CodeSuggestPage() {
     setOutput(null)
     
     try {
-      let response
-      switch (activeTab) {
-        case 'optimize':
-          response = await codeApi.optimizeCode(code)
-          break
-        case 'tests':
-          response = await codeApi.generateTests(code)
-          break
-        case 'complexity':
-          response = await codeApi.analyzeComplexity(code)
-          break
+      const response = await api.post('/suggest', { code, type: activeTab })
+      const result = response.data.result
+      
+      // Format output based on type
+      let formattedOutput: string
+      if (activeTab === 'optimize') {
+        formattedOutput = `// Optimized Code\n${result.optimizedCode}\n\n/* Changes made:\n${result.changes.map((c: string) => ` * ${c}`).join('\n')}\n */`
+      } else if (activeTab === 'tests') {
+        formattedOutput = result.testCode
+      } else {
+        formattedOutput = `# Complexity Analysis Report\n\n## Time Complexity: ${result.time}\n\n## Space Complexity: ${result.space}\n\n## Explanation:\n${result.explanation}`
       }
-      setOutput(response.data.result || mockResponses[activeTab])
+      
+      setOutput(formattedOutput)
     } catch {
       // Use mock response for demo
       await new Promise(resolve => setTimeout(resolve, 1500))
