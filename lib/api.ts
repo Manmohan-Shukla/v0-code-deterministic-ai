@@ -1,13 +1,28 @@
 import axios from 'axios'
 
+/**
+ * API Configuration
+ * 
+ * Environment Variables:
+ * - NEXT_PUBLIC_API_URL: Backend API base URL (default: /api for local Next.js routes)
+ *   Examples:
+ *   - Local mock API: /api
+ *   - Local Express backend: http://localhost:5000/api
+ *   - Production backend: https://api.yourdomain.com
+ * 
+ * - NEXT_PUBLIC_API_TIMEOUT: Request timeout in milliseconds (default: 30000)
+ */
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api'
+const API_TIMEOUT = parseInt(process.env.NEXT_PUBLIC_API_TIMEOUT || '30000', 10)
+
 // Create axios instance with base configuration
-// Uses local Next.js API routes by default, or external backend if NEXT_PUBLIC_API_URL is set
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || '/api',
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 30000, // 30 second timeout for AI operations
+  timeout: API_TIMEOUT,
 })
 
 // Request interceptor to add auth token

@@ -130,15 +130,37 @@ export async function GET() {
   const mockHistory = [
     {
       id: '1',
-      codeSnippet: 'function add(a, b) { return a + b; }',
-      reviewedAt: new Date(Date.now() - 86400000).toISOString(),
-      issues: 1
+      code: 'function add(a, b) { return a + b; }',
+      language: 'javascript',
+      createdAt: new Date(Date.now() - 86400000).toISOString(),
+      results: [
+        {
+          type: 'suggestion',
+          title: 'Add JSDoc comment',
+          description: 'Consider adding a JSDoc comment to document this function',
+          line: 1
+        }
+      ]
     },
     {
       id: '2', 
-      codeSnippet: 'const fetchData = async () => { ... }',
-      reviewedAt: new Date(Date.now() - 172800000).toISOString(),
-      issues: 2
+      code: 'const fetchData = async () => { /* ... */ }',
+      language: 'javascript',
+      createdAt: new Date(Date.now() - 172800000).toISOString(),
+      results: [
+        {
+          type: 'warning',
+          title: 'Missing error handling',
+          description: 'Async function should have error handling',
+          line: 1
+        },
+        {
+          type: 'suggestion',
+          title: 'Use more specific error types',
+          description: 'Consider catching specific error types',
+          line: 1
+        }
+      ]
     }
   ]
 

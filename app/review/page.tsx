@@ -88,7 +88,12 @@ export default function CodeReviewPage() {
   const loadHistory = async () => {
     try {
       const response = await api.get('/review')
-      setHistory(response.data.history || mockHistory)
+      const historyData = response.data?.history || []
+      // Ensure all items have required fields
+      const validHistory = historyData.filter((item: ReviewHistoryItem) => 
+        item && item.id && item.code && Array.isArray(item.results)
+      )
+      setHistory(validHistory.length > 0 ? validHistory : mockHistory)
     } catch {
       // Use mock data if API fails
       setHistory(mockHistory)
@@ -226,7 +231,7 @@ export default function CodeReviewPage() {
             
             {history.length > 0 ? (
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {history.map((item) => (
+                {history.filter(item => item && item.id).map((item) => (
                   <button
                     key={item.id}
                     onClick={() => handleHistoryClick(item)}
@@ -263,12 +268,12 @@ export default function CodeReviewPage() {
                     
                     {/* Issues summary */}
                     <div className="mt-3 flex gap-2">
-                      {item.results.filter(r => r.type === 'error').length > 0 && (
+                      {Array.isArray(item.results) && item.results.filter(r => r.type === 'error').length > 0 && (
                         <span className="rounded-full bg-red-500/10 px-2 py-0.5 text-xs text-red-500">
                           {item.results.filter(r => r.type === 'error').length} errors
                         </span>
                       )}
-                      {item.results.filter(r => r.type === 'warning').length > 0 && (
+                      {Array.isArray(item.results) && item.results.filter(r => r.type === 'warning').length > 0 && (
                         <span className="rounded-full bg-yellow-500/10 px-2 py-0.5 text-xs text-yellow-500">
                           {item.results.filter(r => r.type === 'warning').length} warnings
                         </span>
