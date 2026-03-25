@@ -2,21 +2,20 @@ import axios from 'axios'
 
 /**
  * API Configuration
- * 
+ *
  * Environment Variables:
- * - NEXT_PUBLIC_API_URL: Backend API base URL (default: /api for local Next.js routes)
+ * - NEXT_PUBLIC_API_URL: Backend API base URL
  *   Examples:
- *   - Local mock API: /api
- *   - Local Express backend: http://localhost:5000/api
- *   - Production backend: https://api.yourdomain.com
- * 
- * - NEXT_PUBLIC_API_TIMEOUT: Request timeout in milliseconds (default: 30000)
+ *   - Local mock: /api
+ *   - Local backend: http://localhost:5000/api
+ *   - Production: https://code-determinsitic-ai.onrender.com/api
+ *
+ * - NEXT_PUBLIC_API_TIMEOUT: Request timeout in ms (default: 30000)
  */
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api'
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'
 const API_TIMEOUT = parseInt(process.env.NEXT_PUBLIC_API_TIMEOUT || '30000', 10)
 
-// Create axios instance with base configuration
+// Create axios instance
 const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
@@ -25,10 +24,9 @@ const api = axios.create({
   timeout: API_TIMEOUT,
 })
 
-// Request interceptor to add auth token
+// Request interceptor - add JWT token
 api.interceptors.request.use(
   (config) => {
-    // Only access localStorage on client side
     if (typeof window !== 'undefined') {
       const token = localStorage.getItem('token')
       if (token) {
@@ -37,21 +35,20 @@ api.interceptors.request.use(
     }
     return config
   },
-  (error) => {
-    return Promise.reject(error)
-  }
+  (error) => Promise.reject(error)
 )
 
-// Response interceptor for error handling
+// Response interceptor - handle 401 (logout)
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Token expired or invalid - clear storage and redirect
       if (typeof window !== 'undefined') {
         localStorage.removeItem('token')
         localStorage.removeItem('user')
-        window.location.href = '/login'
+if (!window.location.pathname.includes('/login')) {
+  window.location.href = '/login'
+}
       }
     }
     return Promise.reject(error)
@@ -60,39 +57,66 @@ api.interceptors.response.use(
 
 export default api
 
-// API endpoints for code analysis features
-export const codeApi = {
-  // Code Review
-  analyzeCode: (code: string, language?: string) => 
-    api.post('/code/review', { code, language }),
-  
-  getReviewHistory: () => 
-    api.get('/code/reviews'),
-  
-  getReviewById: (id: string) => 
-    api.get(`/code/reviews/${id}`),
+// ==================== TYPE DEFINITIONS ====================
 
-  // Code Optimization
-  optimizeCode: (code: string, language?: string) => 
-    api.post('/code/optimize', { code, language }),
-
-  // Test Case Generation
-  generateTests: (code: string, language?: string, framework?: string) => 
-    api.post('/code/generate-tests', { code, language, framework }),
-
-  // Complexity Analysis
-  analyzeComplexity: (code: string, language?: string) => 
-    api.post('/code/complexity', { code, language }),
+export interface AnalyzeCodePayload {
+  language: string
+  code: string
+  constraints?: string
 }
 
-// Auth endpoints
+export interface SuggestPayload {
+  code: string
+  problem?: string
+  constraints?: Record<string, any>
+  metadata?: any
+  language?: string
+}
+
+// ==================== CODE REVIEW API ====================
+
+export const codeApi = {
+  // Matches your analyzecode controller
+  analyzeCode: (payload: AnalyzeCodePayload) =>
+    api.post('/api/review/analyze', payload),
+
+  // Matches your getHistory controller
+  getReviewHistory: () =>
+    api.get('/api/review/history'),
+
+  // Matches your getId controller
+  getReviewById: (id: string) =>
+    api.get(`/api/review/${id}`),
+}
+
+// ==================== CODE SUGGEST / AI FEATURES API ====================
+
+export const suggestApi = {
+  // Matches your testcase controller
+  generateTests: (payload: SuggestPayload) =>
+    api.post('/api/suggest/testcase', payload),
+
+  // Matches your timecomplexity controller
+  analyzeComplexity: (payload: { code: string }) =>
+    api.post('/api/suggest/timecomplexity', payload),
+
+  // Matches your optimize controller
+  optimizeCode: (payload: SuggestPayload) =>
+    api.post('/api/suggest/optimize', payload),
+}
+
+// ==================== AUTH API ====================
+
 export const authApi = {
-  login: (email: string, password: string) => 
-    api.post('/auth/login', { email, password }),
-  
-  signup: (name: string, email: string, password: string) => 
-    api.post('/auth/signup', { name, email, password }),
-  
-  getProfile: () => 
-    api.get('/auth/profile'),
+  // Matches your login controller
+  login: (email: string, password: string) =>
+    api.post('/api/auth/login', { email, password }),
+
+  // Matches your signup controller (uses username, not name)
+  signup: (username: string, email: string, password: string) =>
+    api.post('/api/auth/signup', { username, email, password }),
+
+  // Matches your getMe controller
+  getProfile: () =>
+    api.get('/api/auth/me'),
 }

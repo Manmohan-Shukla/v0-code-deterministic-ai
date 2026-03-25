@@ -1,297 +1,293 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Search, Loader2, Clock, ChevronRight, Code2 } from 'lucide-react'
+import { useState } from 'react'
+import { Search, Loader2 } from 'lucide-react'
 import Navbar from '@/components/Navbar'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import CodeEditor from '@/components/CodeEditor'
-import ResultPanel from '@/components/ResultPanel'
 import { Button } from '@/components/ui/button'
 import api from '@/lib/api'
-import { cn } from '@/lib/utils'
 
 interface ReviewResult {
   type: 'error' | 'warning' | 'suggestion' | 'info' | 'success'
   title: string
-  description: string
-  line?: number
-  code?: string
+  raw?: any
+  description?: string
 }
 
-interface ReviewHistoryItem {
-  id: string
-  code: string
-  language?: string
-  results: ReviewResult[]
-  createdAt: string
+// ✅ Format label
+function formatLabel(key: string) {
+  return key
+    .replace(/_/g, ' ')
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/\b\w/g, c => c.toUpperCase())
 }
 
-// Mock data for demo
-const mockResults: ReviewResult[] = [
-  {
-    type: 'error',
-    title: 'Potential null reference',
-    description: 'The variable "user" might be null when accessed. Consider adding a null check.',
-    line: 5,
-    code: 'if (user) { /* safe access */ }',
-  },
-  {
-    type: 'warning',
-    title: 'Unused variable',
-    description: 'The variable "temp" is declared but never used in this scope.',
-    line: 12,
-  },
-  {
-    type: 'suggestion',
-    title: 'Use const instead of let',
-    description: 'The variable "data" is never reassigned. Consider using const for immutability.',
-    line: 3,
-    code: 'const data = fetchData();',
-  },
-  {
-    type: 'success',
-    title: 'Good error handling',
-    description: 'The try-catch block properly handles potential errors in the async operation.',
-    line: 15,
-  },
-]
+// ✅ Color logic (IMPORTANT)
+function getValueColor(value: any) {
+  if (value === true) return 'text-green-500'
+  if (value === false) return 'text-red-500'
+  return 'text-zinc-900 dark:text-zinc-100'
+}
 
-const mockHistory: ReviewHistoryItem[] = [
-  {
-    id: '1',
-    code: 'function hello() { return "world"; }',
-    language: 'javascript',
-    results: mockResults.slice(0, 2),
-    createdAt: new Date(Date.now() - 3600000).toISOString(),
-  },
-  {
-    id: '2',
-    code: 'const sum = (a, b) => a + b;',
-    language: 'typescript',
-    results: mockResults.slice(2),
-    createdAt: new Date(Date.now() - 86400000).toISOString(),
-  },
-]
+// ✅ Clean AI text
+function cleanAIText(text: string) {
+  return text
+    .replace(/\*\*/g, '')
+    .replace(/^\s*[-–•]\s+/gm, '')
+    .replace(/\n\s*\n/g, '\n\n')
+    .trim()
+}
 
-export default function CodeReviewPage() {
-  const [code, setCode] = useState('')
-  const [results, setResults] = useState<ReviewResult[] | null>(null)
-  const [isAnalyzing, setIsAnalyzing] = useState(false)
-  const [history, setHistory] = useState<ReviewHistoryItem[]>([])
-  const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null)
+// ✅ Parse AI sections
+function parseAISections(text: string) {
+  const clean = cleanAIText(text)
+  const lines = clean.split('\n').map(l => l.trim()).filter(Boolean)
 
-  // Load history on mount
-  useEffect(() => {
-    loadHistory()
-  }, [])
+  const sections: { title: string; content: string[] }[] = []
+  let current = { title: '', content: [] as string[] }
 
-  const loadHistory = async () => {
-    try {
-      const response = await api.get('/review')
-      const historyData = response.data?.history || []
-      // Ensure all items have required fields
-      const validHistory = historyData.filter((item: ReviewHistoryItem) => 
-        item && item.id && item.code && Array.isArray(item.results)
-      )
-      setHistory(validHistory.length > 0 ? validHistory : mockHistory)
-    } catch {
-      // Use mock data if API fails
-      setHistory(mockHistory)
+  for (let line of lines) {
+    if (
+      line.toLowerCase().includes('error') ||
+      line.toLowerCase().includes('complexity') ||
+      line.toLowerCase().includes('fix')
+    ) {
+      if (current.title) sections.push(current)
+      current = { title: line.replace(':', ''), content: [] }
+    } else {
+      current.content.push(line)
     }
   }
 
+  if (current.title) sections.push(current)
+  return sections
+}
+
+export default function CodeReviewPage() {
+  const [code, setCode] = useState('')
+  const [language, setLanguage] = useState('javascript')
+  const [constraints, setConstraints] = useState('')
+  const [results, setResults] = useState<ReviewResult[] | null>(null)
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
+
   const handleAnalyze = async () => {
     if (!code.trim()) return
-    
+
     setIsAnalyzing(true)
     setResults(null)
-    
+
     try {
-      const response = await api.post('/review', { code })
-      const analysis = response.data.analysis
-      
-      // Transform API response to ReviewResult format
-      const transformedResults: ReviewResult[] = []
-      
-      // Add issues
-      if (Array.isArray(analysis?.issues)) {
-        analysis.issues.forEach((issue: { type: string; line?: number; message: string }) => {
-          transformedResults.push({
-            type: (issue.type === 'info' ? 'suggestion' : issue.type) as ReviewResult['type'],
-            title: issue.type.charAt(0).toUpperCase() + issue.type.slice(1),
-            description: issue.message,
-            line: issue.line,
-          })
+      const res = await api.post('/api/review/analyze', {
+        code,
+        language,
+        constraints
+      })
+
+      const { static_info, failure_info, response } = res.data
+
+      const formatted: ReviewResult[] = []
+
+      if (static_info) {
+        formatted.push({
+          type: 'info',
+          title: '🔍 Static Analysis',
+          raw: static_info
         })
       }
-      
-      // Add suggestions
-      if (Array.isArray(analysis?.suggestions)) {
-        analysis.suggestions.forEach((suggestion: string) => {
-          transformedResults.push({
-            type: 'suggestion',
-            title: 'Suggestion',
-            description: suggestion,
-          })
+
+      if (failure_info) {
+        formatted.push({
+          type: 'warning',
+          title: '⚠️ Failure Analysis',
+          raw: failure_info
         })
       }
-      
-      setResults(transformedResults.length > 0 ? transformedResults : [{
-        type: 'success',
-        title: 'No Issues Found',
-        description: 'Your code looks good! No issues or warnings detected.',
-      }])
-      
-      // Refresh history after successful analysis
-      loadHistory()
-    } catch {
-      // Use mock results for demo
-      await new Promise(resolve => setTimeout(resolve, 1500))
-      setResults(mockResults)
+
+      if (response) {
+        formatted.push({
+          type: 'success',
+          title: '🤖 AI Review',
+          description: response
+        })
+      }
+
+      setResults(formatted)
+
+    } catch (err) {
+      console.error(err)
+      setResults([
+        {
+          type: 'error',
+          title: '❌ Error',
+          description: 'Failed to analyze code'
+        }
+      ])
     } finally {
       setIsAnalyzing(false)
     }
   }
 
-  const handleHistoryClick = (item: ReviewHistoryItem) => {
-    setCode(item.code)
-    setResults(item.results)
-    setSelectedHistoryId(item.id)
-  }
-
-  const formatTimeAgo = (dateString: string) => {
-    const date = new Date(dateString)
-    const now = new Date()
-    const diffMs = now.getTime() - date.getTime()
-    const diffMins = Math.floor(diffMs / 60000)
-    const diffHours = Math.floor(diffMs / 3600000)
-    const diffDays = Math.floor(diffMs / 86400000)
-    
-    if (diffMins < 60) return `${diffMins}m ago`
-    if (diffHours < 24) return `${diffHours}h ago`
-    return `${diffDays}d ago`
-  }
-
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen bg-white text-black dark:bg-black dark:text-white">
         <Navbar />
-        
-        <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-          {/* Header */}
-          <div className="mb-6">
-            <h1 className="text-2xl font-bold text-foreground">Code Review</h1>
-            <p className="mt-1 text-muted-foreground">
-              Paste your code and get instant AI-powered analysis
-            </p>
-          </div>
-          
-          {/* Main Content - Split Layout */}
-          <div className="grid gap-6 lg:grid-cols-2">
-            {/* Left - Code Input */}
-            <div className="flex flex-col gap-4">
-              <CodeEditor
-                value={code}
-                onChange={setCode}
-                placeholder="Paste your code here for review..."
-                minHeight="450px"
-              />
-              
-              <Button
-                onClick={handleAnalyze}
-                disabled={!code.trim() || isAnalyzing}
-                size="lg"
-                className="gap-2"
+
+        <main className="mx-auto max-w-7xl px-4 py-8">
+
+          <h1 className="text-2xl font-bold mb-6">Code Review</h1>
+
+          {/* Controls */}
+          <div className="mb-6 grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="text-sm">Language</label>
+              <select
+                value={language}
+                onChange={(e) => setLanguage(e.target.value)}
+                className="w-full p-2 border rounded-md bg-white dark:bg-zinc-900"
               >
+                <option value="javascript">JavaScript</option>
+                <option value="python">Python</option>
+                <option value="cpp">C++</option>
+                <option value="java">Java</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="text-sm">Constraints</label>
+              <input
+                value={constraints}
+                onChange={(e) => setConstraints(e.target.value)}
+                placeholder="optimize for time..."
+                className="w-full p-2 border rounded-md bg-white dark:bg-zinc-900"
+              />
+            </div>
+          </div>
+
+          <div className="grid lg:grid-cols-2 gap-6">
+
+            {/* LEFT */}
+            <div className="flex flex-col gap-4">
+              <CodeEditor value={code} onChange={setCode} />
+
+              <Button onClick={handleAnalyze} disabled={isAnalyzing}>
                 {isAnalyzing ? (
                   <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <Loader2 className="animate-spin mr-2" />
                     Analyzing...
                   </>
                 ) : (
                   <>
-                    <Search className="h-4 w-4" />
+                    <Search className="mr-2" />
                     Analyze Code
                   </>
                 )}
               </Button>
             </div>
-            
-            {/* Right - Results Panel */}
-            <ResultPanel
-              title="Analysis Results"
-              results={results}
-              isLoading={isAnalyzing}
-            />
-          </div>
-          
-          {/* Review History */}
-          <div className="mt-10">
-            <h2 className="mb-4 text-xl font-semibold text-foreground">Review History</h2>
-            
-            {history.length > 0 ? (
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {history.filter(item => item && item.id).map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => handleHistoryClick(item)}
-                    className={cn(
-                      'group rounded-xl border p-4 text-left transition-all hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5',
-                      selectedHistoryId === item.id
-                        ? 'border-primary bg-primary/5'
-                        : 'border-border bg-card'
-                    )}
-                  >
-                    {/* Code Preview */}
-                    <div className="mb-3 flex items-center gap-2">
-                      <Code2 className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-xs font-medium uppercase text-muted-foreground">
-                        {item.language || 'code'}
-                      </span>
+
+            {/* RIGHT */}
+            <div className="space-y-4">
+
+              {results?.map((res, i) => (
+                <div
+                  key={i}
+                  className="rounded-xl border p-4 shadow-sm
+                             bg-zinc-50 dark:bg-zinc-900
+                             border-zinc-200 dark:border-zinc-700"
+                >
+                  <h3 className="font-semibold mb-3 text-lg">
+                    {res.title}
+                  </h3>
+
+                  {/* 🔍 STATIC */}
+                  {res.title.includes('Static') && res.raw && (
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      {Object.entries(res.raw).map(([key, value]) => (
+                        <div
+                          key={key}
+                          className="flex justify-between px-3 py-2 rounded-md
+                                     bg-white dark:bg-zinc-800
+                                     border border-zinc-200 dark:border-zinc-700"
+                        >
+                          <span className="text-xs opacity-70">
+                            {formatLabel(key)}
+                          </span>
+
+                          <span className={`font-semibold text-xs ${getValueColor(value)}`}>
+                            {String(value)}
+                          </span>
+                        </div>
+                      ))}
                     </div>
-                    
-                    <pre className="mb-3 overflow-hidden truncate font-mono text-sm text-foreground">
-                      {(item.code || '').slice(0, 50)}...
-                    </pre>
-                    
-                    {/* Meta */}
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <Clock className="h-3 w-3" />
-                        {formatTimeAgo(item.createdAt)}
+                  )}
+
+                  {/* ⚠️ FAILURE (SMART) */}
+                  {res.title.includes('Failure') && res.raw && (
+                    <div className="space-y-3">
+
+                      {/* top grid */}
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        {Object.entries(res.raw)
+                          .filter(([key]) => key !== 'reason')
+                          .map(([key, value]) => (
+                            <div
+                              key={key}
+                              className="flex justify-between px-3 py-2 rounded-md
+                                         bg-white dark:bg-zinc-800
+                                         border border-zinc-200 dark:border-zinc-700"
+                            >
+                              <span className="text-xs opacity-70">
+                                {formatLabel(key)}
+                              </span>
+
+                              <span className={`font-semibold text-xs ${getValueColor(value)}`}>
+                                {String(value)}
+                              </span>
+                            </div>
+                          ))}
                       </div>
-                      <div className="flex items-center gap-1 text-xs text-primary opacity-0 transition-opacity group-hover:opacity-100">
-                        View
-                        <ChevronRight className="h-3 w-3" />
-                      </div>
-                    </div>
-                    
-                    {/* Issues summary */}
-                    <div className="mt-3 flex gap-2">
-                      {Array.isArray(item.results) && item.results.filter(r => r.type === 'error').length > 0 && (
-                        <span className="rounded-full bg-red-500/10 px-2 py-0.5 text-xs text-red-500">
-                          {item.results.filter(r => r.type === 'error').length} errors
-                        </span>
-                      )}
-                      {Array.isArray(item.results) && item.results.filter(r => r.type === 'warning').length > 0 && (
-                        <span className="rounded-full bg-yellow-500/10 px-2 py-0.5 text-xs text-yellow-500">
-                          {item.results.filter(r => r.type === 'warning').length} warnings
-                        </span>
+
+                      {/* reason full width */}
+                      {res.raw.reason && (
+                        <div className="p-3 rounded-md
+                                        bg-white dark:bg-zinc-800
+                                        border border-zinc-200 dark:border-zinc-700">
+                          <p className="text-xs opacity-60 mb-1">Reason</p>
+                          <p className="text-sm leading-relaxed">
+                            {res.raw.reason}
+                          </p>
+                        </div>
                       )}
                     </div>
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <div className="rounded-xl border border-border bg-card p-8 text-center">
-                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-                  <Clock className="h-6 w-6 text-muted-foreground" />
+                  )}
+
+                  {/* 🤖 AI */}
+                  {!res.raw && (
+                    <div className="space-y-4 text-sm leading-relaxed">
+                      {parseAISections(res.description || '').map((section, idx) => (
+                        <div key={idx}>
+                          <h4 className="font-semibold mb-2 opacity-80">
+                            {section.title}
+                          </h4>
+
+                          <ul className="space-y-1">
+                            {section.content.map((item, i) => (
+                              <li key={i} className="flex gap-2">
+                                <span>•</span>
+                                <span>{item}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                 </div>
-                <p className="mt-4 text-sm text-muted-foreground">
-                  No review history yet. Start by analyzing some code above.
-                </p>
-              </div>
-            )}
+              ))}
+
+            </div>
+
           </div>
         </main>
       </div>

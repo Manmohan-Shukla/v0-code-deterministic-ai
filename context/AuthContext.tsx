@@ -1,12 +1,12 @@
 'use client'
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import api from '@/lib/api'
 
 interface User {
   id: string
-  name: string
+  username: string
   email: string
 }
 
@@ -16,7 +16,7 @@ interface AuthContextType {
   isLoading: boolean
   isAuthenticated: boolean
   login: (email: string, password: string) => Promise<void>
-  signup: (name: string, email: string, password: string) => Promise<void>
+  signup: (username: string, email: string, password: string) => Promise<void>
   logout: () => void
   error: string | null
   clearError: () => void
@@ -29,82 +29,139 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const router = useRouter()
 
-  // Initialize auth state from localStorage
+  const router = useRouter()
+  const pathname = usePathname()
+
+  // ✅ 1. Load from localStorage safely
   useEffect(() => {
     const storedToken = localStorage.getItem('token')
     const storedUser = localStorage.getItem('user')
-    
-    if (storedToken && storedUser) {
+
+    if (storedToken && storedUser && storedUser !== "undefined") {
       try {
         setToken(storedToken)
         setUser(JSON.parse(storedUser))
-      } catch {
-        // Invalid stored data, clear it
+      } catch (err) {
+        console.log("Invalid stored user → clearing")
         localStorage.removeItem('token')
         localStorage.removeItem('user')
       }
     }
+
     setIsLoading(false)
   }, [])
 
+  // ✅ 2. Verify token with backend
+  useEffect(() => {
+    const verifyUser = async () => {
+      if (!token) return
+
+      try {
+        const res = await api.get('/api/auth/me')
+        setUser(res.data.user)
+      } catch (err) {
+        console.log("Token invalid → clearing")
+
+        localStorage.removeItem('token')
+        localStorage.removeItem('user')
+
+        setToken(null)
+        setUser(null)
+      }
+    }
+
+    verifyUser()
+  }, [token])
+
+  // ✅ 3. Route protection (NO LOOP)
+  useEffect(() => {
+    if (isLoading) return
+
+    const publicPages = ['/login', '/signup']
+    const isPublicPage = publicPages.includes(pathname)
+
+    if (!token && !isPublicPage) {
+      router.replace('/login')
+      return
+    }
+
+    if (token && isPublicPage) {
+      router.replace('/dashboard')
+      return
+    }
+  }, [token, isLoading, pathname, router])
+
+  // ✅ 4. Login
   const login = async (email: string, password: string) => {
     setIsLoading(true)
     setError(null)
-    
+
     try {
-      const response = await api.post('/auth/login', { email, password })
-      const { token: newToken, user: userData } = response.data
-      
-      setToken(newToken)
-      setUser(userData)
+      const res = await api.post('/api/auth/login', { email, password })
+
+      const { token: newToken, user: userData } = res.data
+
+      if (!newToken || !userData) {
+        throw new Error("Invalid response from server")
+      }
+
       localStorage.setItem('token', newToken)
       localStorage.setItem('user', JSON.stringify(userData))
-      
+
+      setToken(newToken)
+      setUser(userData)
+
       router.push('/dashboard')
-    } catch (err: unknown) {
-      const errorMessage = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Login failed. Please try again.'
-      setError(errorMessage)
-      throw new Error(errorMessage)
+    } catch (err: any) {
+      const msg = err.response?.data?.message || "Login failed"
+      setError(msg)
+      throw new Error(msg)
     } finally {
       setIsLoading(false)
     }
   }
 
-  const signup = async (name: string, email: string, password: string) => {
+  // ✅ 5. Signup
+  const signup = async (username: string, email: string, password: string) => {
     setIsLoading(true)
     setError(null)
-    
+
     try {
-      const response = await api.post('/auth/signup', { name, email, password })
-      const { token: newToken, user: userData } = response.data
-      
-      setToken(newToken)
-      setUser(userData)
+      const res = await api.post('/api/auth/signup', { username, email, password })
+
+      const { token: newToken, user: userData } = res.data
+
+      if (!newToken || !userData) {
+        throw new Error("Invalid response from server")
+      }
+
       localStorage.setItem('token', newToken)
       localStorage.setItem('user', JSON.stringify(userData))
-      
+
+      setToken(newToken)
+      setUser(userData)
+
       router.push('/dashboard')
-    } catch (err: unknown) {
-      const axiosError = err as { response?: { data?: { message?: string }, status?: number }, message?: string }
-      const errorMessage = axiosError?.response?.data?.message || axiosError?.message || 'Signup failed. Please try again.'
-      setError(errorMessage)
-      throw new Error(errorMessage)
+    } catch (err: any) {
+      const msg = err.response?.data?.message || "Signup failed"
+      setError(msg)
+      throw new Error(msg)
     } finally {
       setIsLoading(false)
     }
   }
 
+  // ✅ 6. Logout (safe)
   const logout = () => {
-    setToken(null)
-    setUser(null)
     localStorage.removeItem('token')
     localStorage.removeItem('user')
-    router.push('/login')
-  }
 
-  const clearError = () => setError(null)
+    setToken(null)
+    setUser(null)
+
+    router.replace('/login')
+  }
 
   return (
     <AuthContext.Provider
@@ -117,7 +174,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signup,
         logout,
         error,
-        clearError,
+        clearError: () => setError(null),
       }}
     >
       {children}
@@ -127,8 +184,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   const context = useContext(AuthContext)
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider')
+  if (!context) {
+    throw new Error('useAuth must be used within AuthProvider')
   }
   return context
 }
