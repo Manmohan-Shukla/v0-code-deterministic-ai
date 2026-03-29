@@ -1,7 +1,6 @@
 'use client'
 
 import { cn } from '@/lib/utils'
-import { useRef } from 'react'
 
 interface CodeEditorProps {
   value: string
@@ -21,12 +20,12 @@ export default function CodeEditor({
   minHeight = '400px',
 }: CodeEditorProps) {
 
-  const lineRef = useRef<HTMLDivElement>(null)
+  const lines = (value || '').split('\n')
 
   return (
     <div
       className={cn(
-        'relative rounded-lg border border-border bg-card overflow-hidden',
+        'rounded-lg border border-border bg-card overflow-hidden',
         className
       )}
     >
@@ -44,15 +43,12 @@ export default function CodeEditor({
 
       {/* Editor */}
       <div
-        className="relative overflow-auto code-scrollbar"
+        className="flex overflow-auto code-scrollbar"
         style={{ minHeight }}
       >
         {/* Line Numbers */}
-        <div
-          ref={lineRef}
-          className="pointer-events-none absolute left-0 top-0 w-12 select-none border-r border-border bg-muted/30 px-2 py-4 text-right font-mono text-xs text-muted-foreground"
-        >
-          {(value || '').split('\n').map((_, i) => (
+        <div className="flex-shrink-0 w-12 border-r border-border bg-muted/30 px-2 py-4 text-right font-mono text-xs text-muted-foreground">
+          {lines.map((_, i) => (
             <div key={i} className="leading-6">
               {i + 1}
             </div>
@@ -67,14 +63,8 @@ export default function CodeEditor({
           placeholder={placeholder}
           readOnly={readOnly}
           spellCheck={false}
-          onScroll={(e) => {
-            // 🔥 sync line numbers with scroll
-            if (lineRef.current) {
-              lineRef.current.style.transform = `translateY(-${e.currentTarget.scrollTop}px)`
-            }
-          }}
           className={cn(
-            'w-full resize-none bg-transparent py-4 pl-16 pr-4 font-mono text-sm leading-6 text-foreground placeholder:text-muted-foreground focus:outline-none',
+            'flex-1 resize-none bg-transparent py-4 px-4 font-mono text-sm leading-6 text-foreground placeholder:text-muted-foreground focus:outline-none',
             readOnly && 'cursor-default'
           )}
           style={{ minHeight }}
